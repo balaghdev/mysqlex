@@ -1,6 +1,6 @@
 # Mysqlex
 
-**TODO: Add description**
+> A native MySQL driver for Elixir
 
 ## Installation
 
