@@ -69,7 +69,6 @@ defmodule Mysqlex.Protocol do
      character_set, status_flags, capability_flags_upper, auth_plugin_data_len,auth_plugin_data, auth_plugin_name}
   end
 
-  max(13, auth_plugin_data_len - 8)
 
 
   # Helper function
