@@ -5,12 +5,27 @@ defmodule Mysqlex do
   alias Mysqlex.Protocol
 
   @doc """
-    Starts and connect to the mysql server 
-    `iex> {:ok, pid} = Mysqlex.start_link(host, port, opts)`
+    Start the connection process and connect to the mysql server 
+    
+    ## Options
+
+    * `:hostname` - Server hostname
+    * `:port` - Server port number
+    * `:username` - Db username
+    * `:password` - Db password
+    * `:database` - database name
+    * `:port` - port number of mysql server defaults 3306
   """
 
-  def start_link(host, port, opts \\ []) do
-    opts = [hostname: host, port: port] ++ opts
+  def start_link(hostname, username, password, database, port) do
+    opts = [
+      hostname: hostname,
+      username: username,
+      password: password,
+      database: database,
+      port: 3306
+    ]
+
     DBConnection.start_link(Protocol, opts)
   end
 end
