@@ -1,10 +1,16 @@
 defmodule Mysqlex.Protocol do
   use DBConnection
 
-  defstruct host: nil, socket: nil, username: nil, database: nil, port: nil, timeout: nil
+  defstruct host: nil,
+            socket: nil,
+            username: nil,
+            database: nil,
+            port: nil,
+            timeout: nil,
+            opts: nil
 
   @doc """
-   DBConnection callback for `Mysqlex.startlink/3`
+   DBConnection callback for `Mysqlex.startlink/5`
   """
   def connect(opts) do
     host = Keyword.fetch!(opts, :hostname) |> String.to_charlist() || "localhost"
@@ -19,30 +25,34 @@ defmodule Mysqlex.Protocol do
       username: username,
       database: database,
       port: port,
-      timeout: timeout
+      timeout: timeout,
+      opts: opts
     }
 
     case apply(Mysqlex.Tcp, :connect, [host, port, socket_opts, timeout]) do
       {:ok, socket} ->
         state = %{state | socket: socket}
-        {data} = handshake(socket, state)
+        data = handshake(socket, state)
+        IO.inspect(data)
+        {:ok, state}
 
       {:error, _} = error ->
         error
     end
-
-    IO.inspect(state)
   end
 
   def checkout(state) do
     {:ok, state}
   end
 
-  defp handshake(socket, state) do
-    {payload_length, sequence_id} = parse_header(socket)
-    payload_body(socket, payload_length)
+  def checkin(state) do
+    {:ok, state}
   end
 
+  defp handshake(socket, state) do
+    {payload_length, sequence_id} = parse_header(socket)
+    parse_payload_body(socket, payload_length)
+  end
 
   # Parsing of Initial handshake 
   defp parse_header(socket) do
@@ -60,16 +70,14 @@ defmodule Mysqlex.Protocol do
       character_set::little-integer-size(8), status_flags::little-integer-size(16),
       capability_flags_upper::little-integer-size(16),
       auth_plugin_data_len::little-integer-size(8), reserved::little-binary-size(10),
-      auth_plugin_data_part_2::little-binary-size(13),
-      auth_plugin_name::binary>> = body
+      auth_plugin_data_part_2::little-binary-size(13), auth_plugin_name::binary>> = body
 
     [auth_plugin_name, _] = String.split(auth_plugin_name, <<0>>)
 
     {version, server_version, connection_id, auth_plugin_data_part_1, capability_flags_lower,
-     character_set, status_flags, capability_flags_upper, auth_plugin_data_len,auth_plugin_data, auth_plugin_name}
+     character_set, status_flags, capability_flags_upper, auth_plugin_data_len,
+     auth_plugin_data_part_2, auth_plugin_name}
   end
-
-
 
   # Helper function
   defp recv_msg(socket, bytes) do
