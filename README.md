@@ -6,6 +6,12 @@ A from-scratch implementation of the MySQL client/server protocol on top of
 [`db_connection`](https://hex.pm/packages/db_connection) — no C driver, no
 `:mysql` Erlang library.
 
+## Talk
+
+This project is the companion to my talk at Functional Conf 2019:
+[**Building a MySQL Database Driver in Elixir**](https://www.youtube.com/watch?v=UoxzAPBVuQs)
+(FnConf19).
+
 ## Status
 
 Work in progress. The connection phase is partially implemented: the driver
