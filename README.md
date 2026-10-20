@@ -12,18 +12,19 @@ Work in progress. The connection phase is partially implemented: the driver
 connects over TCP and reads the server's `Protocol::HandshakeV10` packet. The
 command phase callbacks return an error until that work lands.
 
-Next steps, roughly in order:
+The goal is to implement everything in the protocol that can be implemented —
+text and binary protocols, every auth plugin, prepared statements, cursors,
+transactions, replication — rather than the shortest path to a working query.
+An Ecto integration is a someday goal on top of that.
 
-1. Packet layer — `recv_packet`/`send_packet` with sequence-id tracking and the
-   16MB continuation rule
-2. `Protocol::HandshakeResponse41` and `caching_sha2_password` authentication
-3. `OK_Packet` / `ERR_Packet` parsing
-4. `COM_QUERY` and the text resultset
-5. The remaining `DBConnection` callbacks
+See [ROADMAP.md](ROADMAP.md) for the plan, phase by phase, and for how to pick
+this up: local server setup, capturing real packets as test fixtures, and the
+reference implementations worth reading.
 
 ## Installation
 
-Not published to Hex yet. To try it from git:
+This is a personal project rather than a library, and it is not published to
+Hex. To try it from git anyway:
 
 ```elixir
 def deps do
