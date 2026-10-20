@@ -1,0 +1,213 @@
+# Backward compatibility
+
+Source: <https://dev.mysql.com/doc/dev/mysql-server/latest/group__group__cs__backward__compatibility.html>
+
+| Macros |  |
+| --- | --- |
+| #define | CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+|  |  |
+| #define | FIELD_TYPE_DECIMAL MYSQL_TYPE_DECIMAL |
+|  |  |
+| #define | FIELD_TYPE_NEWDECIMAL MYSQL_TYPE_NEWDECIMAL |
+|  |  |
+| #define | FIELD_TYPE_TINY MYSQL_TYPE_TINY |
+|  |  |
+| #define | FIELD_TYPE_SHORT MYSQL_TYPE_SHORT |
+|  |  |
+| #define | FIELD_TYPE_LONG MYSQL_TYPE_LONG |
+|  |  |
+| #define | FIELD_TYPE_FLOAT MYSQL_TYPE_FLOAT |
+|  |  |
+| #define | FIELD_TYPE_DOUBLE MYSQL_TYPE_DOUBLE |
+|  |  |
+| #define | FIELD_TYPE_NULL MYSQL_TYPE_NULL |
+|  |  |
+| #define | FIELD_TYPE_TIMESTAMP MYSQL_TYPE_TIMESTAMP |
+|  |  |
+| #define | FIELD_TYPE_LONGLONG MYSQL_TYPE_LONGLONG |
+|  |  |
+| #define | FIELD_TYPE_INT24 MYSQL_TYPE_INT24 |
+|  |  |
+| #define | FIELD_TYPE_DATE MYSQL_TYPE_DATE |
+|  |  |
+| #define | FIELD_TYPE_TIME MYSQL_TYPE_TIME |
+|  |  |
+| #define | FIELD_TYPE_DATETIME MYSQL_TYPE_DATETIME |
+|  |  |
+| #define | FIELD_TYPE_YEAR MYSQL_TYPE_YEAR |
+|  |  |
+| #define | FIELD_TYPE_NEWDATE MYSQL_TYPE_NEWDATE |
+|  |  |
+| #define | FIELD_TYPE_ENUM MYSQL_TYPE_ENUM |
+|  |  |
+| #define | FIELD_TYPE_SET MYSQL_TYPE_SET |
+|  |  |
+| #define | FIELD_TYPE_TINY_BLOB MYSQL_TYPE_TINY_BLOB |
+|  |  |
+| #define | FIELD_TYPE_MEDIUM_BLOB MYSQL_TYPE_MEDIUM_BLOB |
+|  |  |
+| #define | FIELD_TYPE_LONG_BLOB MYSQL_TYPE_LONG_BLOB |
+|  |  |
+| #define | FIELD_TYPE_BLOB MYSQL_TYPE_BLOB |
+|  |  |
+| #define | FIELD_TYPE_VAR_STRING MYSQL_TYPE_VAR_STRING |
+|  |  |
+| #define | FIELD_TYPE_STRING MYSQL_TYPE_STRING |
+|  |  |
+| #define | FIELD_TYPE_CHAR MYSQL_TYPE_TINY |
+|  |  |
+| #define | FIELD_TYPE_INTERVAL MYSQL_TYPE_ENUM |
+|  |  |
+| #define | FIELD_TYPE_GEOMETRY MYSQL_TYPE_GEOMETRY |
+|  |  |
+| #define | FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+|  |  | 
+
+## Detailed Description
+
+## Macro Definition Documentation
+
+## ◆ CLIENT_MULTI_QUERIES
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- | 
+
+## ◆ FIELD_TYPE_BIT
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- | 
+
+## ◆ FIELD_TYPE_BLOB
+
+| #define FIELD_TYPE_BLOB MYSQL_TYPE_BLOB |
+| --- | 
+
+## ◆ FIELD_TYPE_CHAR
+
+| #define FIELD_TYPE_CHAR MYSQL_TYPE_TINY |
+| --- | 
+
+## ◆ FIELD_TYPE_DATE
+
+| #define FIELD_TYPE_DATE MYSQL_TYPE_DATE |
+| --- | 
+
+## ◆ FIELD_TYPE_DATETIME
+
+| #define FIELD_TYPE_DATETIME MYSQL_TYPE_DATETIME |
+| --- | 
+
+## ◆ FIELD_TYPE_DECIMAL
+
+| #define FIELD_TYPE_DECIMAL MYSQL_TYPE_DECIMAL |
+| --- | 
+
+## ◆ FIELD_TYPE_DOUBLE
+
+| #define FIELD_TYPE_DOUBLE MYSQL_TYPE_DOUBLE |
+| --- | 
+
+## ◆ FIELD_TYPE_ENUM
+
+| #define FIELD_TYPE_ENUM MYSQL_TYPE_ENUM |
+| --- | 
+
+## ◆ FIELD_TYPE_FLOAT
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |0 
+
+## ◆ FIELD_TYPE_GEOMETRY
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |1 
+
+## ◆ FIELD_TYPE_INT24
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |2 
+
+## ◆ FIELD_TYPE_INTERVAL
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |3 
+
+## ◆ FIELD_TYPE_LONG
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |4 
+
+## ◆ FIELD_TYPE_LONG_BLOB
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |5 
+
+## ◆ FIELD_TYPE_LONGLONG
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |6 
+
+## ◆ FIELD_TYPE_MEDIUM_BLOB
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |7 
+
+## ◆ FIELD_TYPE_NEWDATE
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |8 
+
+## ◆ FIELD_TYPE_NEWDECIMAL
+
+| #define CLIENT_MULTI_QUERIES CLIENT_MULTI_STATEMENTS |
+| --- |9 
+
+## ◆ FIELD_TYPE_NULL
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |0 
+
+## ◆ FIELD_TYPE_SET
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |1 
+
+## ◆ FIELD_TYPE_SHORT
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |2 
+
+## ◆ FIELD_TYPE_STRING
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |3 
+
+## ◆ FIELD_TYPE_TIME
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |4 
+
+## ◆ FIELD_TYPE_TIMESTAMP
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |5 
+
+## ◆ FIELD_TYPE_TINY
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |6 
+
+## ◆ FIELD_TYPE_TINY_BLOB
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |7 
+
+## ◆ FIELD_TYPE_VAR_STRING
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |8 
+
+## ◆ FIELD_TYPE_YEAR
+
+| #define FIELD_TYPE_BIT MYSQL_TYPE_BIT |
+| --- |9

@@ -1,29 +1,28 @@
 defmodule Mysqlex do
   @moduledoc """
-    MySQL native driver for elixir
+  MySQL native driver for Elixir.
   """
+
   alias Mysqlex.Protocol
 
   @doc """
-    Start the connection process and connect to the mysql server 
-    
-    ## Options
+  Start the connection process and connect to the MySQL server.
+
+  ## Options
 
     * `:hostname` - Server hostname
-    * `:port` - Server port number
-    * `:username` - Db username
-    * `:password` - Db password
-    * `:database` - database name
-    * `:port` - port number of mysql server defaults 3306
+    * `:username` - DB username
+    * `:password` - DB password
+    * `:database` - Database name
+    * `:port` - Port number of the MySQL server, defaults to 3306
   """
-
-  def start_link(hostname, username, password, database, port) do
+  def start_link(hostname, username, password, database, port \\ 3306) do
     opts = [
       hostname: hostname,
       username: username,
       password: password,
       database: database,
-      port: 3306
+      port: port
     ]
 
     DBConnection.start_link(Protocol, opts)
