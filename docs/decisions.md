@@ -11,7 +11,7 @@ there is evidence), **open** (not decided yet).
 
 ### 1. Keep `db_connection` rather than a plain GenServer
 
-**2026-10-20 · settled**
+**2026-10-20 · settled** · clarified by #15
 
 The driver stays on the `DBConnection` behaviour.
 
@@ -191,6 +191,47 @@ Integration tests against a real MySQL come later and stay separate.
 
 The placeholder test asserting `Mysqlex.hello() == :world` was deleted rather than
 made to pass; the suite is empty until the first real test.
+
+### 15. Keep `db_connection` now, hand-build a replacement later
+
+**2026-10-28 · settled**
+
+Keep `db_connection` while building the protocol. Once the driver works end to
+end, replacing it with a hand-written connection and pool becomes an option —
+and a deliberate exercise rather than a prerequisite.
+
+**Correcting #1:** that entry said the Ecto goal settled it. More precisely, Ecto
+itself does *not* require DBConnection — `etso`, an ETS-backed adapter, depends on
+`ecto` alone and implements `Ecto.Adapter`, `Ecto.Adapter.Schema` and
+`Ecto.Adapter.Queryable` directly. What requires DBConnection is
+`Ecto.Adapters.SQL`, the helper that supplies most of a SQL adapter. So dropping
+DBConnection costs `Ecto.Adapters.SQL`, not Ecto, and the swap stays available in
+either direction.
+
+Reason for keeping it now is momentum, not architecture. This project was
+abandoned once already. Owning the protocol and a hand-built pool at the same
+time means that when a query returns wrong rows, it is unclear whether the row
+decoder is wrong or a connection was checked back in with bytes still unread in
+its socket buffer — two unproven layers debugged against each other. That is a
+good way to stall again.
+
+What DBConnection is worth, concretely: 4,259 lines, of which `holder.ex` (474)
+exists to guarantee that a connection whose owner process died is never silently
+reused. The protocol-level production problems stay this project's own either
+way — error classification, draining half-read resultsets, `max_allowed_packet`,
+prepared statement invalidation across reconnects, TLS hostname verification,
+sub-binaries holding whole packets alive on the heap.
+
+Consequences:
+
+- The protocol layer must not depend on DBConnection, following MyXQL's split: a
+  standalone client that works on its own, with the behaviour as a thin wrapper
+  over it. That keeps the swap cheap and keeps the protocol testable without any
+  pooling in the picture.
+- Start with a single connection and no concurrency, so that every bug during the
+  protocol phases is a protocol bug by construction. Pooling becomes its own phase
+  afterwards.
+- The stubbed callbacks from #8 stay — they compile, and they document the gap.
 
 ---
 
