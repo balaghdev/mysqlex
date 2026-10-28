@@ -21,6 +21,30 @@ defmodule Mysqlex.Packet do
   def decode(_data), do: :more
 
   @doc """
+  Decodes one logical message, rejoining any continuation frames.
+
+  A frame carrying exactly #{@max_payload} bytes means another frame follows, so
+  frames are collected until a shorter one ends the message. Returns
+  `{:ok, sequence_id, message, rest}` with the sequence id of the final frame —
+  the next frame the connection expects is that id plus one — or `:more` while
+  any frame of the message is still outstanding.
+  """
+  def decode_message(data), do: decode_message(data, [])
+
+  defp decode_message(data, frames) do
+    case decode(data) do
+      {:ok, _sequence_id, payload, rest} when byte_size(payload) == @max_payload ->
+        decode_message(rest, [payload | frames])
+
+      {:ok, sequence_id, payload, rest} ->
+        {:ok, sequence_id, IO.iodata_to_binary(Enum.reverse([payload | frames])), rest}
+
+      :more ->
+        :more
+    end
+  end
+
+  @doc """
   Encodes `payload` as a packet carrying `sequence_id`, returning iodata.
 
   A payload of #{@max_payload} bytes or more does not fit in the 3-byte length,

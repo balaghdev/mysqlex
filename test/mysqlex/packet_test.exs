@@ -46,5 +46,19 @@ defmodule Mysqlex.PacketTest do
       assert IO.iodata_to_binary(Packet.encode(payload, 0)) ==
                <<@max_payload::little-24, 0>> <> payload <> <<0::little-24, 1>>
     end
+
+    test "decode_message/1 reassembles continuation frames" do
+      head = :binary.copy(<<0>>, @max_payload)
+      data = IO.iodata_to_binary(Packet.encode(head <> "tail", 0))
+
+      assert {:ok, 1, message, ""} = Packet.decode_message(data)
+      assert message == head <> "tail"
+    end
+
+    test "decode_message/1 returns :more until the final frame arrives" do
+      head = :binary.copy(<<0>>, @max_payload)
+
+      assert :more = Packet.decode_message(<<@max_payload::little-24, 0>> <> head)
+    end
   end
 end
