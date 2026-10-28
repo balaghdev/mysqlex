@@ -1,5 +1,6 @@
 defmodule Mysqlex.PacketTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   alias Mysqlex.Packet
 
@@ -19,5 +20,13 @@ defmodule Mysqlex.PacketTest do
 
   test "encodes a payload into a packet" do
     assert Packet.encode("hello", 0) == <<5::little-24, 0, "hello">>
+  end
+
+  property "decode/1 inverts encode/2" do
+    check all(payload <- binary(), sequence_id <- integer(0..255)) do
+      encoded = IO.iodata_to_binary(Packet.encode(payload, sequence_id))
+
+      assert {:ok, ^sequence_id, ^payload, ""} = Packet.decode(encoded)
+    end
   end
 end
