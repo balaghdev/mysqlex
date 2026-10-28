@@ -16,4 +16,8 @@ defmodule Mysqlex.PacketTest do
 
     assert {:ok, 0, "hello", ^second} = Packet.decode(<<5::little-24, 0, "hello">> <> second)
   end
+
+  test "encodes a payload into a packet" do
+    assert Packet.encode("hello", 0) == <<5::little-24, 0, "hello">>
+  end
 end

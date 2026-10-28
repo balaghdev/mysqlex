@@ -17,4 +17,11 @@ defmodule Mysqlex.Packet do
     do: {:ok, sequence_id, payload, rest}
 
   def decode(_data), do: :more
+
+  @doc """
+  Encodes `payload` as a packet carrying `sequence_id`.
+  """
+  def encode(payload, sequence_id) do
+    <<byte_size(payload)::little-24, sequence_id, payload::binary>>
+  end
 end
