@@ -32,9 +32,9 @@ To convert a number value into a length-encoded integer:
 | Greater or equal | Lower than | Stored as |
 | --- | --- | --- |
 | 0 | 251 | 1-byte integer |
-| 251 | 216 | 0xFC + 2-byte integer |
-| 216 | 224 | 0xFD + 3-byte integer |
-| 224 | 264 | 0xFE + 8-byte integer | 
+| 251 | 2^16 | 0xFC + 2-byte integer |
+| 2^16 | 2^24 | 0xFD + 3-byte integer |
+| 2^24 | 2^64 | 0xFE + 8-byte integer | 
 
 Similarly, to convert a length-encoded integer into its numeric value check the first byte.
 

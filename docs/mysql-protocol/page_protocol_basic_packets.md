@@ -4,7 +4,7 @@ Source: <https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_p
 
 If a MySQL client or server wants to send data, it:
 
-  * Splits the data into packets of size 224 bytes
+  * Splits the data into packets of size 2^24 bytes
   * Prepends to each chunk a packet header
 
 #  Protocol::Packet
@@ -27,9 +27,9 @@ See also
 
 #  Sending More Than 16Mb
 
-If the payload is larger than or equal to 224-1 bytes the length is set to 224-1 (`ff ff ff`) and a additional packets are sent with the rest of the payload until the payload of a packet is less than 224-1 bytes.
+If the payload is larger than or equal to 2^24-1 bytes the length is set to 2^24-1 (`ff ff ff`) and a additional packets are sent with the rest of the payload until the payload of a packet is less than 2^24-1 bytes.
 
-Sending a payload of 16 777 215 (224-1) bytes looks like:
+Sending a payload of 16 777 215 (2^24-1) bytes looks like:
 
 ff ff ff 00 ...
 
