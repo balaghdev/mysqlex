@@ -25,7 +25,8 @@ An Ecto integration is a someday goal on top of that.
 
 See [ROADMAP.md](ROADMAP.md) for the plan, phase by phase, and for how to pick
 this up: local server setup, capturing real packets as test fixtures, and the
-reference implementations worth reading.
+reference implementations worth reading. Choices made along the way, and why,
+are in [docs/decisions.md](docs/decisions.md).
 
 ## Installation
 

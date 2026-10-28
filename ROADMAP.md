@@ -11,6 +11,9 @@ path to a working query. Eventually an Ecto integration on top. Not a published
 library — this is a personal project, so protocol completeness and understanding
 are the point, and packaging polish is not.
 
+Decisions made along the way are recorded in
+[docs/decisions.md](docs/decisions.md), including the ones still open.
+
 ## Where things stand
 
 - Toolchain current: Erlang 27.3.4.15 / Elixir 1.20.4, `db_connection` 2.10, CI green
