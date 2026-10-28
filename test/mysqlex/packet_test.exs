@@ -10,4 +10,10 @@ defmodule Mysqlex.PacketTest do
   test "returns :more when the payload has not fully arrived" do
     assert :more = Packet.decode(<<5::little-24, 0, "hel">>)
   end
+
+  test "returns the bytes following the packet as rest" do
+    second = <<3::little-24, 1, "bye">>
+
+    assert {:ok, 0, "hello", ^second} = Packet.decode(<<5::little-24, 0, "hello">> <> second)
+  end
 end
