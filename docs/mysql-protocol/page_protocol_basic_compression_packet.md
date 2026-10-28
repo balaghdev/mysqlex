@@ -140,7 +140,7 @@ c0 c0 62 94 48 32 00 ea 67 05 eb 07 00 8d f9 1c ..b.H2..g.......
 **Definition:** jit_executor_value.cc:373
 
 Note
-    sending a MySQL Packet of the size 224-5 to 224-1 via compression leads to at least one extra compressed packet. If the uncompressed MySQL Packet is like 
+    sending a MySQL Packet of the size 2^24-5 to 2^24-1 via compression leads to at least one extra compressed packet. If the uncompressed MySQL Packet is like 
 
 fe ff ff 03 ... -- [length](https://dev.mysql.com/doc/dev/mysql-server/latest/namespacegis.html#a1e3bf735dbe640151561b282f0f4dba5) = 2^24-2, [sequence](https://dev.mysql.com/doc/dev/mysql-server/latest/udf__example_8cc.html#aa48a6c218d5a51dadae7378c4e83c109) id = 3
 
