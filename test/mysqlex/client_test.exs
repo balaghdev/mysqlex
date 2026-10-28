@@ -9,4 +9,10 @@ defmodule Mysqlex.ClientTest do
     assert {:ok, 0, "hello", ""} =
              Client.recv_message(FakeTransport, socket, "", 1_000)
   end
+
+  test "propagates a transport error when the message never completes" do
+    socket = FakeTransport.script([<<5::little-24>>, <<0, "hel">>])
+
+    assert {:error, :closed} = Client.recv_message(FakeTransport, socket, "", 1_000)
+  end
 end
