@@ -3,7 +3,7 @@ defmodule Mysqlex do
   MySQL native driver for Elixir.
   """
 
-  alias Mysqlex.Protocol
+  alias Mysqlex.Connection
 
   @doc """
   Start the connection process and connect to the MySQL server.
@@ -25,6 +25,6 @@ defmodule Mysqlex do
       port: port
     ]
 
-    DBConnection.start_link(Protocol, opts)
+    DBConnection.start_link(Connection, opts)
   end
 end
