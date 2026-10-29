@@ -16,18 +16,38 @@ Decisions made along the way are recorded in
 
 ## Where things stand
 
-- Toolchain current: Erlang 27.3.4.15 / Elixir 1.20.4, `db_connection` 2.10, CI green
-- Phase 1 is done: framing, the socket read loop, the wire-type codecs, and the
-  three generic response packets. 31 tests, 4 of them properties
-- `Mysqlex.Protocol` still holds the 2018 handshake parse and the stubbed
-  `DBConnection` callbacks; nothing routes through `Mysqlex.Client` yet
-- No dispatcher: nothing inspects a payload's first byte to choose a parser
+**The driver connects to a real MySQL server, authenticates, and runs any
+statement that returns no rows.** 58 tests with `--include integration`, 50 and
+4 excluded without.
 
-**Known broken, fix first:** `parse_payload_body/2` reads `server_version` as a
-fixed 6 bytes, but the protocol says NUL-terminated; `auth_plugin_data_part_2` is
-fixed at 13 bytes where the spec says `MAX(13, len - 8)`. Both are in
-`lib/mysqlex/protocol.ex` and both are the kind of thing phase 1's codecs make
-easy to get right.
+- Toolchain current: Erlang 27.3.4.15 / Elixir 1.20.4, `db_connection` 2.10
+- Phases 1 and 2 are done; phase 3 has `COM_QUERY` but not resultsets
+- No line of the February 2018 code remains. `Mysqlex.Protocol` is deleted; the
+  `DBConnection` callbacks now live in `Mysqlex.Connection` as a thin wrapper
+  whose state is a `%Mysqlex.Client{}`
+- Both 2018 handshake bugs are fixed, and verified against bytes captured from a
+  real server: the old pattern raises on MySQL 8.4.4 and parses only when the
+  version string happens to be six characters, as 5.7.21's was
+
+What works end to end against MySQL 8.0:
+
+```elixir
+{:ok, client} = Client.connect(hostname: "127.0.0.1", port: 3307,
+                               username: "mysqlex", password: "secret",
+                               database: "mysqlex_test")
+
+{:ok, insert, client} = Client.query(client, "INSERT INTO widgets (name) VALUES ('first')")
+insert.affected_rows   # => 1
+insert.last_insert_id  # => 1
+```
+
+`SELECT` returns `{:error, :resultset_not_implemented, client}` until the
+resultset parsers land, which is the next slice.
+
+**CI does not prove the login.** The workflow has no MySQL service, so it runs
+the default suite only. A green check means the parsers agree with the spec and
+the fixtures, not that a connection succeeded. Adding a `services: mysql:8.0`
+leg would close that gap.
 
 ## How to work on this
 
@@ -94,34 +114,49 @@ Each phase should end somewhere runnable.
 
 Deliberately not here:
 
-- Sequence id tracking across a command — it is a parameter to the codec, and
-  tracking belongs to whatever owns the connection, which does not exist yet
+- Sequence id tracking across a command — it stays a parameter to the codec.
+  Done in phase 3, where `Client.query/3` resets it to 0 per command, which is
+  the first point at which there was a command to track it across
 - The dispatcher that decides whether a payload beginning `0xFE` is an EOF
   packet, an OK standing in for one, or a length-encoded integer. It needs the
   payload length and the command context
 - `CLIENT_SESSION_TRACK` in the OK packet — the capability will not be
   advertised until phase 5
 
-### 2. Connection phase
+### 2. Connection phase — logging in works
 
-- [ ] Fix the `HandshakeV10` field parse
-- [ ] Capability flag negotiation — decide what the client claims
-- [ ] `HandshakeResponse41`
-- [ ] `mysql_native_password` (get connected first)
-- [ ] `AuthSwitchRequest` / `AuthSwitchResponse` / `AuthMoreData`
+- [x] Fix the `HandshakeV10` field parse
+- [x] Capability flag negotiation — what the client claims, and what it refuses
+- [x] `HandshakeResponse41`
+- [x] `mysql_native_password`
+- [x] `AuthSwitchRequest` / `AuthSwitchResponse`
+- [ ] `AuthMoreData`, needed by `caching_sha2_password`
 - [ ] `caching_sha2_password` — fast path, then the full RSA public key path
 - [ ] `sha256_password`
 - [ ] `SSLRequest` and the TLS upgrade
 - [ ] Expired passwords, `AuthNextFactor` (MFA)
 
-### 3. Text protocol
+Until `caching_sha2_password` lands, a modern server at default settings cannot
+be reached — the account has to be created `IDENTIFIED WITH
+mysql_native_password`, and MySQL 8.4 ships that plugin disabled. Hence the 8.0
+pin in the integration setup.
 
-- [ ] `COM_QUERY`
+The server names its *default* plugin in the greeting, before it knows which
+account is connecting, and settles the real one with an `AuthSwitchRequest`
+afterwards. Refusing on the greeting's plugin rejects logins the server would
+have completed. This was found by running against a real server; no scripted test
+would have shown it, because a fake only replays what you already believe.
+
+### 3. Text protocol — statements run, rows do not come back yet
+
+- [x] `COM_QUERY`, and the response dispatch on its first byte
 - [ ] Text resultset: column count, column definitions, rows, `0xFB` for NULL
 - [ ] Decode every `MYSQL_TYPE_*` to an Elixir term — decimal, date/time/datetime,
       JSON, bit, blob, the lot
 - [ ] Multi-resultset via `SERVER_MORE_RESULTS_EXISTS`, and `CLIENT_MULTI_STATEMENTS`
-- [ ] `LOCAL INFILE` request/data
+- [ ] `LOCAL INFILE` request/data — currently refused outright, since
+      `CLIENT_LOCAL_FILES` is not claimed and a server asking the client for a
+      file is either broken or hostile
 
 ### 4. Binary protocol and prepared statements
 
