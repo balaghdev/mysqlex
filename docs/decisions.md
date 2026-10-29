@@ -157,13 +157,19 @@ Provisional because none of it is built yet.
 
 ### 12. Rename `Mysqlex.Protocol` to `Mysqlex.Connection`
 
-**2026-10-20 · open**
+**2026-10-20 · settled 2026-10-29**
 
 Today `Mysqlex.Protocol` holds the DBConnection callbacks, but every other driver
 uses "protocol" for the codec layer. Keeping both meanings will be confusing once
 `protocol/` exists as a directory of codecs.
 
-Not done yet. Cheap now at ~130 lines, expensive later.
+Done once `Mysqlex.Client` took over the connection phase, which is also when
+the 2018 handshake parsing in that module became dead code and was deleted.
+`Mysqlex.Connection` is now a thin `DBConnection` wrapper whose state is a
+`%Mysqlex.Client{}`, which is what keeps decision 15's swap cheap.
+
+`Mysqlex.Error` became an exception at the same time, because `DBConnection`
+specifies its callbacks as returning `Exception.t()`.
 
 ### 13. Authentication order: `mysql_native_password` before `caching_sha2_password`
 

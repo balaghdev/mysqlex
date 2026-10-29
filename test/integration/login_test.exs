@@ -38,6 +38,18 @@ defmodule Mysqlex.LoginIntegrationTest do
     assert error.message =~ "Access denied"
   end
 
+  test "connects through DBConnection" do
+    assert {:ok, pid} = DBConnection.start_link(Mysqlex.Connection, @opts)
+
+    on_exit(fn ->
+      # a DBConnection pool shuts down rather than stopping normally
+      Process.unlink(pid)
+      Process.exit(pid, :shutdown)
+    end)
+
+    assert Process.alive?(pid)
+  end
+
   test "a database the account cannot reach is refused after authentication" do
     assert {:error, %Error{} = error} = Client.connect(Keyword.put(@opts, :database, "nope"))
 
