@@ -17,9 +17,11 @@ Decisions made along the way are recorded in
 ## Where things stand
 
 - Toolchain current: Erlang 27.3.4.15 / Elixir 1.20.4, `db_connection` 2.10, CI green
-- `Mysqlex.Protocol` connects over TCP and reads the server's `Protocol::HandshakeV10`
-- Everything else is a stub that returns `DBConnection.ConnectionError`
-- Test suite is empty — the first real test starts phase 1
+- Phase 1 is done: framing, the socket read loop, the wire-type codecs, and the
+  three generic response packets. 31 tests, 4 of them properties
+- `Mysqlex.Protocol` still holds the 2018 handshake parse and the stubbed
+  `DBConnection` callbacks; nothing routes through `Mysqlex.Client` yet
+- No dispatcher: nothing inspects a payload's first byte to choose a parser
 
 **Known broken, fix first:** `parse_payload_body/2` reads `server_version` as a
 fixed 6 bytes, but the protocol says NUL-terminated; `auth_plugin_data_part_2` is
@@ -38,7 +40,28 @@ easy to get right.
   decisions against a production driver. Reading first means implementing someone
   else's design without having had the thought.
 - Keep `mix format`, `mix credo --strict`, `mix dialyzer` and
-  `mix compile --warnings-as-errors` clean — CI enforces all four.
+  `mix compile --warnings-as-errors` clean — CI enforces all four. Gate on the
+  exit code, not on filtered output: a pipe into `grep` or `tail` exits 0 even
+  when the tests failed.
+- **Nothing lands on `master` directly.** Each slice gets a branch and a pull
+  request, reviewed before merging.
+
+### How the tests are organised
+
+The module boundaries follow what a test needs, so most of the suite runs
+without a database:
+
+| Tier | Needs | Example |
+| --- | --- | --- |
+| 1 | nothing — pure functions | codecs, framing, auth scrambles |
+| 2 | captured bytes in `test/fixtures/` | packet body parsers |
+| 3 | a scripted `Mysqlex.Transport` in `test/support/` | the read loop, the connection phase |
+| 4 | a real MySQL, tagged `:integration` and excluded by default | queries, prepared statements |
+
+Tier 1 and 2 are where property tests and spec examples go. Where the protocol
+documentation includes example bytes, use those rather than hand-built fixtures:
+a fixture you author tests the parser against your reading of the spec, which is
+how a misreading passes.
 
 ### Local server
 
@@ -59,14 +82,25 @@ GRANT ALL ON mysqlex_test.* TO 'mysqlex'@'%';
 
 Each phase should end somewhere runnable.
 
-### 1. Foundation
+### 1. Foundation — done
 
-- [ ] `recv_packet` / `send_packet`: 3-byte little-endian length + 1-byte sequence id
-- [ ] Sequence id tracking, and resetting it per command
-- [ ] Packets larger than 2^24-1: splitting on send, reassembly on receive
-- [ ] Buffering — a packet can span several TCP reads
-- [ ] Codecs: `int<lenenc>`, `string<lenenc>`, `string<NUL>`, `string<EOF>`, fixed ints
-- [ ] `OK_Packet`, `ERR_Packet`, `EOF_Packet`, including the `CLIENT_DEPRECATE_EOF` form
+- [x] Frame codec: 3-byte little-endian length + 1-byte sequence id
+- [x] Packets larger than 2^24-1: splitting on send, reassembly on receive
+- [x] Buffering — a packet can span several TCP reads, or several arrive in one
+- [x] `Mysqlex.Transport` behaviour, so reads can be driven without a server
+- [x] Codecs: `int<lenenc>`, `string<lenenc>`, `string<NUL>`; `string<EOF>` is
+      `rest` and fixed-width fields are inline patterns, so neither needs a function
+- [x] `OK_Packet`, `ERR_Packet`, `EOF_Packet`
+
+Deliberately not here:
+
+- Sequence id tracking across a command — it is a parameter to the codec, and
+  tracking belongs to whatever owns the connection, which does not exist yet
+- The dispatcher that decides whether a payload beginning `0xFE` is an EOF
+  packet, an OK standing in for one, or a length-encoded integer. It needs the
+  payload length and the command context
+- `CLIENT_SESSION_TRACK` in the OK packet — the capability will not be
+  advertised until phase 5
 
 ### 2. Connection phase
 
@@ -118,6 +152,9 @@ Each stub in `lib/mysqlex/protocol.ex` maps onto protocol work above:
 
 - [ ] Transactions and savepoints, `handle_status`
 - [ ] Replace the remaining stubs
+
+Replacing `db_connection` with a hand-written connection and pool is an option
+from here, not a prerequisite — see decision 15.
 
 ### 7. Replication
 
