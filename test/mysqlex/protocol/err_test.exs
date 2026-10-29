@@ -14,4 +14,13 @@ defmodule Mysqlex.Protocol.ErrTest do
     assert error.sql_state == "HY000"
     assert error.message == "No tables used"
   end
+
+  test "reads no SQL state when CLIENT_PROTOCOL_41 was not negotiated" do
+    payload = <<0xFF, 0x15, 0x04, "Access denied">>
+
+    assert {:ok, error} = Err.decode(payload, 0)
+    assert error.code == 1045
+    assert error.sql_state == nil
+    assert error.message == "Access denied"
+  end
 end
