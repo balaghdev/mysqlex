@@ -28,4 +28,37 @@ defmodule Mysqlex.Protocol.Codec do
   def decode_int_lenenc(<<0xFD, value::little-24, rest::binary>>), do: {value, rest}
   def decode_int_lenenc(<<0xFE, value::little-64, rest::binary>>), do: {value, rest}
   def decode_int_lenenc(<<value, rest::binary>>) when value < 251, do: {value, rest}
+
+  @doc """
+  Encodes a string as its length followed by its bytes, as iodata.
+  """
+  def encode_string_lenenc(string), do: [encode_int_lenenc(byte_size(string)), string]
+
+  @doc """
+  Decodes a length-prefixed string, returning it with the bytes that follow it.
+  """
+  def decode_string_lenenc(data) do
+    {length, rest} = decode_int_lenenc(data)
+    <<string::binary-size(^length), rest::binary>> = rest
+
+    {string, rest}
+  end
+
+  @doc """
+  Encodes a string with a terminating NUL byte, as iodata.
+
+  The string must not itself contain a NUL, since the terminator is the only
+  thing marking where it ends.
+  """
+  def encode_string_nul(string), do: [string, 0]
+
+  @doc """
+  Decodes a NUL-terminated string, returning it with the bytes that follow the
+  terminator.
+  """
+  def decode_string_nul(data) do
+    [string, rest] = :binary.split(data, <<0>>)
+
+    {string, rest}
+  end
 end

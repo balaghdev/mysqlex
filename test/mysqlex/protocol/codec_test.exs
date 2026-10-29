@@ -41,4 +41,51 @@ defmodule Mysqlex.Protocol.CodecTest do
       end
     end
   end
+
+  describe "string<lenenc>" do
+    test "prefixes the string with its length" do
+      assert IO.iodata_to_binary(Codec.encode_string_lenenc("hello")) == <<5, "hello">>
+      assert IO.iodata_to_binary(Codec.encode_string_lenenc("")) == <<0>>
+    end
+
+    test "uses a multi-byte length prefix once the string is long enough" do
+      long = :binary.copy("x", 300)
+
+      assert IO.iodata_to_binary(Codec.encode_string_lenenc(long)) ==
+               <<0xFC, 300::little-16>> <> long
+    end
+
+    test "decodes the string and leaves what follows" do
+      assert {"hello", "rest"} = Codec.decode_string_lenenc(<<5, "hello", "rest">>)
+      assert {"", "rest"} = Codec.decode_string_lenenc(<<0, "rest">>)
+    end
+
+    property "decoding inverts encoding" do
+      check all(string <- binary()) do
+        encoded = IO.iodata_to_binary(Codec.encode_string_lenenc(string))
+
+        assert {^string, ""} = Codec.decode_string_lenenc(encoded)
+      end
+    end
+  end
+
+  describe "string<NUL>" do
+    test "reads up to the terminator and leaves what follows" do
+      assert {"hello", "rest"} = Codec.decode_string_nul(<<"hello", 0, "rest">>)
+      assert {"", "rest"} = Codec.decode_string_nul(<<0, "rest">>)
+    end
+
+    test "stops at the first terminator" do
+      assert {"a", <<"b", 0>>} = Codec.decode_string_nul(<<"a", 0, "b", 0>>)
+    end
+
+    property "decoding inverts encoding for strings holding no NUL" do
+      check all(bytes <- list_of(integer(1..255))) do
+        string = :erlang.list_to_binary(bytes)
+        encoded = IO.iodata_to_binary(Codec.encode_string_nul(string))
+
+        assert {^string, ""} = Codec.decode_string_nul(encoded)
+      end
+    end
+  end
 end
