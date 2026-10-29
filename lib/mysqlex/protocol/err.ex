@@ -28,5 +28,8 @@ defmodule Mysqlex.Protocol.Err do
   defp split_sql_state(<<?#, sql_state::binary-size(5), message::binary>>, true),
     do: {sql_state, message}
 
-  defp split_sql_state(message, false), do: {nil, message}
+  # The marker carries no information — it exists so that clients older than 4.1
+  # could tell whether a SQL state was present. Treat its absence as the server
+  # having sent none rather than as a malformed packet.
+  defp split_sql_state(message, _protocol_41), do: {nil, message}
 end

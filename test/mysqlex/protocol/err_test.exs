@@ -23,4 +23,12 @@ defmodule Mysqlex.Protocol.ErrTest do
     assert error.sql_state == nil
     assert error.message == "Access denied"
   end
+
+  test "tolerates a 4.1 packet that carries no SQL state marker" do
+    payload = <<0xFF, 0x15, 0x04, "Access denied">>
+
+    assert {:ok, error} = Err.decode(payload, @protocol_41)
+    assert error.sql_state == nil
+    assert error.message == "Access denied"
+  end
 end
