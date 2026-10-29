@@ -63,10 +63,29 @@ defmodule Mysqlex.ClientLoginTest do
     assert error.message =~ "Access denied"
   end
 
-  test "refuses a plugin it cannot speak, rather than guessing" do
-    socket = FakeTransport.script([framed(@handshake, 0)])
+  test "answers an auth switch with a reply built from the fresh scramble" do
+    fresh = :binary.copy(<<9>>, 20)
+    switch = <<0xFE, "mysql_native_password", 0, fresh::binary, 0>>
+    ok = <<0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00>>
 
-    assert {:error, {:unsupported_auth_plugin, "caching_sha2_password"}} =
+    socket =
+      FakeTransport.script([framed(@handshake, 0), framed(switch, 2), framed(ok, 4)])
+
+    assert {:ok, _client} = Client.handshake(FakeTransport, socket, opts(socket))
+
+    # the switch reply is the bare auth data, as sequence id 3
+    assert String.ends_with?(
+             FakeTransport.sent(socket),
+             framed(NativePassword.reply("secret", fresh), 3)
+           )
+  end
+
+  test "refuses a switch to a method it cannot speak, rather than guessing" do
+    scramble = :binary.copy(<<7>>, 20)
+    switch = <<0xFE, "sha256_password", 0, scramble::binary, 0>>
+    socket = FakeTransport.script([framed(@handshake, 0), framed(switch, 2)])
+
+    assert {:error, {:unsupported_auth_plugin, "sha256_password"}} =
              Client.handshake(FakeTransport, socket, opts(socket))
   end
 end

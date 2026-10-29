@@ -1,6 +1,7 @@
 defmodule Mysqlex.Client do
   @moduledoc """
-  Reads and writes packets over a `Mysqlex.Transport`.
+  Reads and writes packets over a `Mysqlex.Transport`, and runs the connection
+  phase.
 
   This is where the socket lives. Everything it hands upwards is a whole
   message, so no parser above it ever sees a partial read.
@@ -8,7 +9,7 @@ defmodule Mysqlex.Client do
 
   alias Mysqlex.Auth.NativePassword
   alias Mysqlex.Packet
-  alias Mysqlex.Protocol.{Err, Handshake, HandshakeResponse, Ok}
+  alias Mysqlex.Protocol.{Codec, Err, Handshake, HandshakeResponse}
 
   defstruct [:transport, :socket, :capabilities, :connection_id, :server_version, buffer: ""]
 
@@ -33,20 +34,24 @@ defmodule Mysqlex.Client do
   @doc """
   Runs the connection phase over an already-open socket.
 
-  The server speaks first, so this reads before it writes: greeting, then the
-  response, then whatever the server makes of it. Separate from `connect/1` so
-  the conversation can be driven by a scripted transport.
+  The server speaks first, so this reads before it writes: greeting, response,
+  then however the server answers. Separate from `connect/1` so the conversation
+  can be driven by a scripted transport.
   """
   def handshake(transport, socket, opts) do
     timeout = Keyword.get(opts, :connect_timeout, @default_timeout)
     username = Keyword.fetch!(opts, :username)
     password = Keyword.get(opts, :password) || ""
     database = Keyword.get(opts, :database)
-    capabilities = HandshakeResponse.capabilities(database)
+
+    client = %__MODULE__{
+      transport: transport,
+      socket: socket,
+      capabilities: HandshakeResponse.capabilities(database)
+    }
 
     with {:ok, sequence_id, greeting, buffer} <- recv_message(transport, socket, "", timeout),
          {:ok, handshake} <- Handshake.decode(greeting),
-         :ok <- supported_plugin(handshake.auth_plugin_name),
          response =
            HandshakeResponse.encode(
              username,
@@ -54,47 +59,16 @@ defmodule Mysqlex.Client do
              database
            ),
          :ok <- send_message(transport, socket, response, sequence_id + 1),
-         {:ok, _sequence_id, reply, buffer} <-
-           recv_message(transport, socket, buffer, timeout),
-         {:ok, _ok} <- decode_login_reply(reply, capabilities) do
+         {:ok, buffer} <- authenticate(client, password, buffer, timeout) do
       {:ok,
-       %__MODULE__{
-         transport: transport,
-         socket: socket,
-         capabilities: capabilities,
-         connection_id: handshake.connection_id,
-         server_version: handshake.server_version,
-         buffer: buffer
+       %{
+         client
+         | connection_id: handshake.connection_id,
+           server_version: handshake.server_version,
+           buffer: buffer
        }}
     end
   end
-
-  @doc """
-  Frames a payload and writes it to the socket.
-  """
-  def send_message(transport, socket, payload, sequence_id) do
-    payload
-    |> IO.iodata_to_binary()
-    |> Packet.encode(sequence_id)
-    |> then(&transport.send(socket, &1))
-  end
-
-  # Only one method is implemented so far. Saying so beats sending a reply the
-  # server will reject for reasons that look like a bad password.
-  defp supported_plugin("mysql_native_password"), do: :ok
-  defp supported_plugin(other), do: {:error, {:unsupported_auth_plugin, other}}
-
-  defp decode_login_reply(<<0x00, _rest::binary>> = payload, capabilities),
-    do: Ok.decode(payload, capabilities)
-
-  defp decode_login_reply(<<0xFF, _rest::binary>> = payload, capabilities) do
-    {:ok, error} = Err.decode(payload, capabilities)
-
-    {:error, error}
-  end
-
-  defp decode_login_reply(<<0xFE, _rest::binary>>, _capabilities),
-    do: {:error, :auth_switch_not_supported}
 
   @doc """
   Reads one message, reading again for as long as the buffer holds less than a
@@ -115,4 +89,50 @@ defmodule Mysqlex.Client do
         end
     end
   end
+
+  @doc """
+  Frames a payload and writes it to the socket.
+  """
+  def send_message(transport, socket, payload, sequence_id) do
+    payload
+    |> IO.iodata_to_binary()
+    |> Packet.encode(sequence_id)
+    |> then(&transport.send(socket, &1))
+  end
+
+  # The greeting names the server's default authentication plugin, chosen before
+  # it knows which account is connecting. When the account uses a different one
+  # the server answers with an AuthSwitchRequest naming what it actually wants,
+  # with a fresh scramble. So the plugin in the greeting is not something to
+  # refuse on — switching is how the protocol settles the mismatch.
+  defp authenticate(%__MODULE__{} = client, password, buffer, timeout) do
+    with {:ok, sequence_id, payload, buffer} <-
+           recv_message(client.transport, client.socket, buffer, timeout) do
+      case payload do
+        <<0x00, _rest::binary>> ->
+          {:ok, buffer}
+
+        <<0xFF, _rest::binary>> ->
+          {:ok, error} = Err.decode(payload, client.capabilities)
+          {:error, error}
+
+        <<0xFE, rest::binary>> ->
+          {plugin, data} = Codec.decode_string_nul(rest)
+          switch_auth(client, plugin, data, password, buffer, sequence_id, timeout)
+      end
+    end
+  end
+
+  defp switch_auth(client, "mysql_native_password", data, password, buffer, sequence_id, timeout)
+       when byte_size(data) >= 20 do
+    # the fresh scramble is 20 bytes and a terminator, as in the greeting
+    reply = NativePassword.reply(password, :binary.part(data, 0, 20))
+
+    with :ok <- send_message(client.transport, client.socket, reply, sequence_id + 1) do
+      authenticate(client, password, buffer, timeout)
+    end
+  end
+
+  defp switch_auth(_client, plugin, _data, _password, _buffer, _sequence_id, _timeout),
+    do: {:error, {:unsupported_auth_plugin, plugin}}
 end
