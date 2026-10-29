@@ -9,7 +9,7 @@ defmodule Mysqlex.Client do
 
   alias Mysqlex.Auth.NativePassword
   alias Mysqlex.Packet
-  alias Mysqlex.Protocol.{Codec, Err, Handshake, HandshakeResponse}
+  alias Mysqlex.Protocol.{Codec, Err, Handshake, HandshakeResponse, Ok}
 
   defstruct [:transport, :socket, :capabilities, :connection_id, :server_version, buffer: ""]
 
@@ -69,6 +69,43 @@ defmodule Mysqlex.Client do
        }}
     end
   end
+
+  @doc """
+  Runs a statement and reads the server's answer.
+
+  Every command starts a fresh sequence, so this writes as sequence id 0 and
+  expects the reply as 1.
+  """
+  def query(%__MODULE__{} = client, statement, timeout \\ @default_timeout) do
+    with :ok <- send_message(client.transport, client.socket, [0x03, statement], 0),
+         {:ok, _sequence_id, payload, buffer} <-
+           recv_message(client.transport, client.socket, client.buffer, timeout) do
+      query_response(payload, %{client | buffer: buffer})
+    end
+  end
+
+  # The first byte of a COM_QUERY response decides everything: 0x00 is an OK for
+  # a statement that returned no rows, 0xFF an error, 0xFB the server asking the
+  # client to upload a file, and anything else is a length-encoded column count
+  # introducing a resultset.
+  defp query_response(<<0x00, _rest::binary>> = payload, client) do
+    {:ok, ok} = Ok.decode(payload, client.capabilities)
+
+    {:ok, ok, client}
+  end
+
+  defp query_response(<<0xFF, _rest::binary>> = payload, client) do
+    {:ok, error} = Err.decode(payload, client.capabilities)
+
+    {:error, error, client}
+  end
+
+  # CLIENT_LOCAL_FILES is not claimed, so a server asking for a file is either
+  # misbehaving or hostile. Refuse rather than read from the filesystem.
+  defp query_response(<<0xFB, _rest::binary>>, client),
+    do: {:error, :local_infile_not_supported, client}
+
+  defp query_response(_payload, client), do: {:error, :resultset_not_implemented, client}
 
   @doc """
   Reads one message, reading again for as long as the buffer holds less than a
