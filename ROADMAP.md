@@ -1,53 +1,106 @@
 # Roadmap
 
-Rough plan for implementing the MySQL client/server protocol. Deliberately not a
-spec — the order matters more than the detail, and the detail lives in
-[`docs/mysql-protocol/`](docs/mysql-protocol/README.md).
+Rough plan. Deliberately not a spec — the order matters more than the detail, and
+the detail lives in [`docs/mysql-protocol/`](docs/mysql-protocol/README.md).
+Decisions and their reasoning are in [`docs/decisions.md`](docs/decisions.md).
 
 ## Goal
 
-Implement everything in the protocol that can be implemented, not the minimum
-path to a working query. Eventually an Ecto integration on top. Not a published
-library — this is a personal project, so protocol completeness and understanding
-are the point, and packaging polish is not.
+Implement everything in the protocol that can be implemented, and then build the
+layers above it rather than borrowing them:
 
-Decisions made along the way are recorded in
-[docs/decisions.md](docs/decisions.md), including the ones still open.
+- **The whole protocol.** Both text and binary, every auth method, prepared
+  statements, cursors, transactions, replication. Not the shortest path to a
+  working query.
+- **Its own query layer.** A composable query value and a compiler to SQL, rather
+  than an Ecto adapter. See "The pivot" below.
+- **`db_connection` for pooling only.** It stays for connection lifecycle,
+  checkout and the crash-safety discipline that is genuinely hard; nothing above
+  the pool depends on it.
+
+Not a published library. Protocol completeness and understanding are the point;
+packaging polish is not.
+
+## The pivot
+
+**2026-10-30.** The project now also aims at a domain-oriented structure and its
+own query stack, rather than a driver plus an Ecto adapter.
+
+What that changes, honestly separated:
+
+**Genuinely new**
+
+- An explicit connection state machine, so illegal operations are unrepresentable.
+  "A resultset is half-read, do not send another command" is a real invariant that
+  nothing currently enforces, and it stops being theoretical once cursors exist.
+- A `query` context: a composable query value plus a compiler to SQL. This is the
+  substance of the pivot.
+- `ssl.ex` behind the transport behaviour, which is also what unblocks
+  `caching_sha2_password`'s full authentication path.
+
+**Mostly renaming**
+
+- `protocol/` becomes `wire/`; `client.ex` becomes `connection/connection.ex`.
+  Worth doing while the code is small; it buys vocabulary, not correctness.
+
+**Deliberately not adopted**
+
+- Repositories. This *is* the persistence mechanism; a repository over packets is
+  not a thing.
+- Domain events. A strict request/response protocol with no subscribers does not
+  need them, and per-row events in a resultset would be actively harmful.
+  Telemetry covers the real need.
+- Service layers over functions that are already one-liners.
+
+**Reading of "immutability style":** functional core, imperative shell. Encoding
+stays pure functions, IO is confined to the transport, and state transitions
+return new values.
+
+**Open question for review:** does the compiler emit SQL with interpolated
+literals, or SQL with placeholders plus a parameter list? Placeholders need
+prepared statements to execute, which is more work and the only version that is
+not an injection hole. Current intent is placeholders, with the query layer landing
+before prepared statements can run it — so it would be compile-and-inspect before
+it is compile-and-execute.
+
+## Target structure
+
+```
+lib/mysqlex/
+├── wire/                          the wire format
+│   ├── packet.ex                  frame
+│   ├── codec.ex                   wire types
+│   └── packets/                   one module per packet
+├── connection/                    the conversation
+│   ├── connection.ex              aggregate root
+│   ├── phase.ex                   state machine
+│   └── transport/                 tcp, ssl
+├── query/                         building SQL
+│   ├── query.ex  compiler.ex
+│   └── fragments/                 from, where, select, join, order, limit
+└── result.ex  row.ex  error.ex
+```
 
 ## Where things stand
 
 **The driver connects to a real MySQL server, authenticates, and runs any
-statement that returns no rows.** 58 tests with `--include integration`, 50 and
-4 excluded without.
+statement that returns no rows.** 58 tests with `--include integration`, 50 and 4
+excluded without.
 
 - Toolchain current: Erlang 27.3.4.15 / Elixir 1.20.4, `db_connection` 2.10
-- Phases 1 and 2 are done; phase 3 has `COM_QUERY` but not resultsets
-- No line of the February 2018 code remains. `Mysqlex.Protocol` is deleted; the
-  `DBConnection` callbacks now live in `Mysqlex.Connection` as a thin wrapper
-  whose state is a `%Mysqlex.Client{}`
-- Both 2018 handshake bugs are fixed, and verified against bytes captured from a
-  real server: the old pattern raises on MySQL 8.4.4 and parses only when the
-  version string happens to be six characters, as 5.7.21's was
+- No line of the February 2018 code remains
+- Both 2018 handshake bugs are fixed, verified against bytes captured from a real
+  server
+- CRUD is three letters of four: `INSERT`, `UPDATE`, `DELETE` and DDL all work;
+  `SELECT` returns `{:error, :resultset_not_implemented, client}`
+- Transaction *statements* already work, since `START TRANSACTION` and `COMMIT`
+  answer with OK packets. `DBConnection`'s transaction callbacks are still stubs
+- No parameter binding and no escaping helper, so values must be interpolated by
+  hand. That is an injection hole by construction and is what the query layer plus
+  prepared statements exist to close
 
-What works end to end against MySQL 8.0:
-
-```elixir
-{:ok, client} = Client.connect(hostname: "127.0.0.1", port: 3307,
-                               username: "mysqlex", password: "secret",
-                               database: "mysqlex_test")
-
-{:ok, insert, client} = Client.query(client, "INSERT INTO widgets (name) VALUES ('first')")
-insert.affected_rows   # => 1
-insert.last_insert_id  # => 1
-```
-
-`SELECT` returns `{:error, :resultset_not_implemented, client}` until the
-resultset parsers land, which is the next slice.
-
-**CI does not prove the login.** The workflow has no MySQL service, so it runs
-the default suite only. A green check means the parsers agree with the spec and
-the fixtures, not that a connection succeeded. Adding a `services: mysql:8.0`
-leg would close that gap.
+**CI does not prove the login.** The workflow has no MySQL service, so a green
+check means the parsers agree with the spec and the fixtures, nothing more.
 
 ## How to work on this
 
@@ -100,108 +153,87 @@ GRANT ALL ON mysqlex_test.* TO 'mysqlex'@'%';
 
 ## Phases
 
-Each phase should end somewhere runnable.
+Reordered for the pivot. The first item is unchanged and comes first for a
+practical reason: every layer above it needs something to read.
 
-### 1. Foundation — done
+### A. Finish the text resultset — next
 
-- [x] Frame codec: 3-byte little-endian length + 1-byte sequence id
-- [x] Packets larger than 2^24-1: splitting on send, reassembly on receive
-- [x] Buffering — a packet can span several TCP reads, or several arrive in one
-- [x] `Mysqlex.Transport` behaviour, so reads can be driven without a server
-- [x] Codecs: `int<lenenc>`, `string<lenenc>`, `string<NUL>`; `string<EOF>` is
-      `rest` and fixed-width fields are inline patterns, so neither needs a function
-- [x] `OK_Packet`, `ERR_Packet`, `EOF_Packet`
+- [ ] Column count, column definitions, rows, `0xFB` for NULL
+- [ ] The `0xFE` disambiguation: EOF packet, an OK standing in for one, or a
+      length-encoded integer, decided by payload length
+- [ ] Replace the catch-all that currently reports `:resultset_not_implemented`
+      for malformed payloads as well as for resultsets
+- [ ] Decode every `MYSQL_TYPE_*` to an Elixir term — decimal, the date/time
+      family, JSON, bit, blob, unsigned 64-bit, `TINYINT(1)`
 
-Deliberately not here:
+This is the largest body of logic in the project and the highest value per hour
+on the list: it is what turns a write-only driver into one you can query with.
 
-- Sequence id tracking across a command — it stays a parameter to the codec.
-  Done in phase 3, where `Client.query/3` resets it to 0 per command, which is
-  the first point at which there was a command to track it across
-- The dispatcher that decides whether a payload beginning `0xFE` is an EOF
-  packet, an OK standing in for one, or a length-encoded integer. It needs the
-  payload length and the command context
-- `CLIENT_SESSION_TRACK` in the OK packet — the capability will not be
-  advertised until phase 5
+### B. Restructure
 
-### 2. Connection phase — logging in works
+- [ ] `wire/` and `wire/packets/`
+- [ ] `connection/` with `Phase` as an explicit state machine
+- [ ] `transport/` as the anti-corruption boundary
+- [ ] `Result` and `Row` value objects
 
-- [x] Fix the `HandshakeV10` field parse
-- [x] Capability flag negotiation — what the client claims, and what it refuses
-- [x] `HandshakeResponse41`
-- [x] `mysql_native_password`
-- [x] `AuthSwitchRequest` / `AuthSwitchResponse`
-- [ ] `AuthMoreData`, needed by `caching_sha2_password`
-- [ ] `caching_sha2_password` — fast path, then the full RSA public key path
-- [ ] `sha256_password`
-- [ ] `SSLRequest` and the TLS upgrade
-- [ ] Expired passwords, `AuthNextFactor` (MFA)
+### C. The query layer
 
-Until `caching_sha2_password` lands, a modern server at default settings cannot
-be reached — the account has to be created `IDENTIFIED WITH
-mysql_native_password`, and MySQL 8.4 ships that plugin disabled. Hence the 8.0
-pin in the integration setup.
+- [ ] A composable query value
+- [ ] Fragments: from, select, where, join, order, limit, offset
+- [ ] A compiler to SQL plus parameters
+- [ ] Decide and record: placeholders or interpolation
 
-The server names its *default* plugin in the greeting, before it knows which
-account is connecting, and settles the real one with an `AuthSwitchRequest`
-afterwards. Refusing on the greeting's plugin rejects logins the server would
-have completed. This was found by running against a real server; no scripted test
-would have shown it, because a fake only replays what you already believe.
+### D. Prepared statements
 
-### 3. Text protocol — statements run, rows do not come back yet
-
-- [x] `COM_QUERY`, and the response dispatch on its first byte
-- [ ] Text resultset: column count, column definitions, rows, `0xFB` for NULL
-- [ ] Decode every `MYSQL_TYPE_*` to an Elixir term — decimal, date/time/datetime,
-      JSON, bit, blob, the lot
-- [ ] Multi-resultset via `SERVER_MORE_RESULTS_EXISTS`, and `CLIENT_MULTI_STATEMENTS`
-- [ ] `LOCAL INFILE` request/data — currently refused outright, since
-      `CLIENT_LOCAL_FILES` is not claimed and a server asking the client for a
-      file is either broken or hostile
-
-### 4. Binary protocol and prepared statements
-
-- [ ] `COM_STMT_PREPARE` and its response (param + column definitions)
+- [ ] `COM_STMT_PREPARE` and its response
 - [ ] `COM_STMT_EXECUTE`: parameter binding, type encoding, null bitmap
 - [ ] Binary resultset rows
 - [ ] `COM_STMT_SEND_LONG_DATA`, `COM_STMT_RESET`, `COM_STMT_CLOSE`
 - [ ] Cursors: `CURSOR_TYPE_READ_ONLY` + `COM_STMT_FETCH`
-- [ ] Decide: are prepared statements cached per connection?
+- [ ] Decide: cached per connection?
 
-### 5. Session and utility commands
+Where the query layer becomes executable rather than inspectable.
 
-- [ ] `COM_PING`, `COM_QUIT`, `COM_INIT_DB`, `COM_RESET_CONNECTION`
-- [ ] `COM_CHANGE_USER`, `COM_SET_OPTION`, `COM_STATISTICS`, `COM_DEBUG`, `COM_FIELD_LIST`
-- [ ] Session state tracking (`SESSION_TRACK_*` in the OK packet)
-- [ ] Compression: zlib, then zstd
+### E. Authentication and TLS
 
-### 6. Complete the DBConnection behaviour
+- [ ] `AuthMoreData`
+- [ ] `caching_sha2_password` — fast path, then full authentication
+- [ ] `ssl.ex` behind the transport behaviour
+- [ ] `sha256_password`
+- [ ] Expired passwords, `AuthNextFactor` (MFA)
 
-Each stub in `lib/mysqlex/protocol.ex` maps onto protocol work above:
+Can float earlier. Until it lands, only accounts created `IDENTIFIED WITH
+mysql_native_password` are reachable, and MySQL 8.4 ships that plugin disabled —
+hence the 8.0 pin in the integration setup.
 
-| Callback | Implemented by |
-| --- | --- |
-| `handle_prepare` / `handle_execute` / `handle_close` | phase 4 |
-| `handle_declare` / `handle_fetch` / `handle_deallocate` | phase 4 cursors (`Repo.stream`) |
-| `handle_begin` / `handle_commit` / `handle_rollback` | transactions + savepoints |
-| `ping` / `disconnect` | `COM_PING` / `COM_QUIT` |
+### F. Reduce `db_connection` to pooling
 
 - [ ] Transactions and savepoints, `handle_status`
-- [ ] Replace the remaining stubs
+- [ ] Replace the remaining stubs so `DBConnection.execute/3` works
+- [ ] Keep nothing above the pool dependent on it
 
-Replacing `db_connection` with a hand-written connection and pool is an option
-from here, not a prerequisite — see decision 15.
+### G. Session and utility commands
 
-### 7. Replication
+- [ ] `COM_PING`, `COM_QUIT`, `COM_INIT_DB`, `COM_RESET_CONNECTION`
+- [ ] `COM_CHANGE_USER`, `COM_SET_OPTION`, `COM_STATISTICS`, `COM_DEBUG`,
+      `COM_FIELD_LIST`
+- [ ] Session state tracking (`SESSION_TRACK_*`)
+- [ ] Multi-resultset via `SERVER_MORE_RESULTS_EXISTS`
+- [ ] `LOCAL INFILE` — currently refused outright, since `CLIENT_LOCAL_FILES` is
+      not claimed and a server asking the client for a file is either broken or
+      hostile
+- [ ] Compression: zlib, then zstd
+
+### H. Replication
 
 - [ ] `COM_BINLOG_DUMP`
 - [ ] Binlog event header and event parsing
 
-### Later: Ecto
+### Dropped from the plan
 
-Out of scope for now, and worth knowing it is two jobs. The driver is this
-project; an `Ecto.Adapters.SQL` adapter also needs a SQL-generation module that
-turns Ecto queries into MySQL SQL. That half is query compilation rather than
-protocol, and is comparable in size.
+An `Ecto.Adapters.SQL` adapter. The pivot builds the query layer directly, so the
+adapter is no longer the destination. It stays possible — the driver would still
+satisfy one — but it is not what this is aiming at.
 
 ## References
 

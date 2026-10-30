@@ -41,7 +41,7 @@ defmodule Mysqlex.Client do
   def handshake(transport, socket, opts) do
     timeout = Keyword.get(opts, :connect_timeout, @default_timeout)
     username = Keyword.fetch!(opts, :username)
-    password = Keyword.get(opts, :password) || ""
+    password = Keyword.get(opts, :password)
     database = Keyword.get(opts, :database)
 
     client = %__MODULE__{
